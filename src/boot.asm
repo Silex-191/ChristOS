@@ -1,12 +1,11 @@
 [BITS 16]
-[ORG 0x7C00]
 cli
 
-; stack and data segments setup
+; data and stack segments setup
 xor ax, ax
+mov ds, ax
 mov ss, ax
 mov sp, 0x7C00
-mov ds, ax
 
 ; extra segment and bx pointing after bootloader code
 mov ax, 0x7E0
@@ -15,10 +14,10 @@ xor bx, bx
 
 ; setuping reading service
 mov ax, 0x0201
-mov cx, 2
-mov dh, 0
+mov cx, 0x2
+mov dh, 0x0
 
-mov bp, 355 ; segments left to read
+mov bp, PAYLOAD_SECTORS ; segments left to read
 segment_read_loop:
   test bp, bp
   jz reading_done
@@ -46,11 +45,6 @@ segment_read_loop:
       xor dh, dh
       inc ch
       jmp segment_read_loop
-reading_done:
-
-sti
-loop:
-  jmp loop
 
 reading_failure:
   mov ah, 0x0E
@@ -58,12 +52,63 @@ reading_failure:
   print_char:
     mov al, byte [bx]
     test al, al
-    jz reading_done
+    jz loop
     inc bx
     int 0x10
     jmp print_char
 
+loop:
+  jmp loop
+
+reading_done:
+
+lgdt [gdt_descriptor]
+cld
+mov eax, cr0
+or eax, 1
+mov cr0, eax
+jmp 0x8:next_line
+[BITS 32]
+next_line:
+mov ax, 0x10
+mov ds, ax
+mov ss, ax
+mov es, ax
+mov fs, ax
+mov gs, ax
+[EXTERN kernel_entry]
+call kernel_entry
+
+[GLOBAL endless_loop]
+endless_loop:
+  jmp endless_loop
+
 error_msg: db "FATAL ERROR", 0x0D, 0x0A, 0x00
+
+gdt_descriptor:
+  dw 0x17
+  dd gdt
+
+align 8
+gdt:
+  null_descriptor:
+    dq 0x0
+
+  code_segment_descriptor:
+    dw 0xFFFF
+    dw 0x0
+    db 0x0
+    db 0b10011010
+    db 0b11001111
+    db 0x0
+
+  data_segment_descriptor:
+    dw 0xFFFF
+    dw 0x0
+    db 0x0
+    db 0b10010010
+    db 0b11001111
+    db 0x0
 
 times 510-($-$$) db 0
 dw 0xAA55
