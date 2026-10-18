@@ -2,7 +2,7 @@ SECTIONS {
   . = 0x7C00;
 
   .boot : {
-    .tmp/boot.o (.text);
+    .tmp/boot.*o (.text);
   }
 
   .kernel : {
