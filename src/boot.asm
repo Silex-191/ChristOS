@@ -1,91 +1,94 @@
 [BITS 16]
-cli ; clear interrupts flag
 
 ; data and stack segments setup
+cli ; clear interrupts flag
 xor ax, ax
 mov ds, ax
 mov ss, ax
 mov sp, 0x7C00
 
-; extra segment and bx pointing after vbr code
-mov ax, 0x7E0
-mov es, ax
-xor bx, bx
+; setup reading service
+sti ; set interrupts flag
+mov si, disk_address_packet
+mov ah, 0x42
 
-; setuping reading service
-mov ax, 0x201
-mov cx, 0x2
-mov dh, 0x0
+mov cx, PAYLOAD_SECTORS ; sectors left to read
+read_payload:
+  test cx, cx
+  jz reading_done
+  dec cx
 
-; segments left to read
-mov bp, PAYLOAD_SECTORS
-
-; At this moment, si and di registers are free
-; ax = 0x201 - const
-; bx = 0x000 - const
-.segment_reading_loop:
-  test bp, bp
-  jz .reading_done
-
-  mov si, 5 ; number of attempts
+  mov bx, 5 ; number of attempts
   .sector_reading_attempt:
     int 0x13
-    jnc .sector_reading_success
-    dec si
-    jz .reading_failure
-    mov ax, 0x201
+    jc .next_attempt
+    test ah, ah
+    jnz .next_attempt
+    jmp .sector_reading_success
+  .next_attempt:
+    dec bx
+    jz reading_failure
+    ; reset disk system
+    xor ah, ah
+    int 0x13
+    ; setup reading service
+    mov word [disk_address_packet + 2], 0x1
+    mov ah, 0x42
     jmp .sector_reading_attempt
   .sector_reading_success:
-  dec bp
 
-  ; shift extra segment and setup service
-  mov ax, es
-  add ax, 0x20
-  mov es, ax
-  mov ax, 0x0201
+  ; setup reading service
+  mov word  [disk_address_packet + 2], 0x1
+  add word [disk_address_packet + 6], 0x20
+  inc dword [disk_address_packet + 8]
+  mov ah, 0x42
 
-  inc cl ; next sector
-  cmp cl, 19
-  jz .next_head
-  jmp .segment_reading_loop
-  .next_head:
-    mov cl, 1
-    inc dh
-    cmp dh, 2
-    jz .next_cylinder
-    jmp .segment_reading_loop
-    .next_cylinder:
-      xor dh, dh
-      inc ch
-      jmp .segment_reading_loop
+  jmp read_payload
 
-.reading_failure:
+reading_failure:
   mov ah, 0x0E
-  mov bx, .reading_failure_msg
+  xor bx, bx
+  mov si, reading_failure_msg
   .print_char:
-    mov al, byte [bx]
+    lodsb
     test al, al
     jz .loop
-    inc bx
     int 0x10
     jmp .print_char
+  .loop:
+    jmp .loop
 
-.loop:
-  jmp .loop
+reading_done:
 
-.reading_done:
+; enable a20
+mov ax, 0x2401
+int 0x15
+jnc a20_enabled
 
-lgdt [.gdt_descriptor]
+; fallback if enabling a20 failed
+in al, 0x92
+test al, 2
+jnz a20_enabled
+or al, 2
+and al, 0xFE
+out 0x92, al
+
+a20_enabled:
+
+; setup protected 32bit mode
+cli ; clear interrupts flag
+lgdt [gdt_descriptor]
 cld
 mov eax, cr0
 or eax, 1
 mov cr0, eax
-jmp 0x8:.next_line
+jmp 0x8:next_line
 [BITS 32]
-.next_line:
+next_line:
 mov ax, 0x10
-mov ds, ax
 mov ss, ax
+mov esp, 0x7C00
+mov ds, ax
 mov es, ax
 mov fs, ax
 mov gs, ax
@@ -94,20 +97,30 @@ call kernel_entry
 
 [GLOBAL endless_loop]
 endless_loop:
+  hlt
   jmp endless_loop
 
-.reading_failure_msg: db "Reading failure", 0x0D, 0x0A, 0x00
+reading_failure_msg: db "Reading failure", 0x0D, 0x0A, 0x00
 
-.gdt_descriptor:
+align 4
+disk_address_packet:
+  db 0x10
+  db 0x0
+  dw 0x1
+  dw 0x0000
+  dw 0x07E0
+  dq 0x1
+
+gdt_descriptor:
   dw 0x17
-  dd .gdt
+  dd global_descriptors_table
 
 align 8
-.gdt:
-  .null_descriptor:
+global_descriptors_table:
+  null_descriptor:
     dq 0x0
 
-  .code_segment_descriptor:
+  code_segment_descriptor:
     dw 0xFFFF
     dw 0x0
     db 0x0
@@ -115,7 +128,7 @@ align 8
     db 0b11001111
     db 0x0
 
-  .data_segment_descriptor:
+  data_segment_descriptor:
     dw 0xFFFF
     dw 0x0
     db 0x0
@@ -123,5 +136,7 @@ align 8
     db 0b11001111
     db 0x0
 
+[GLOBAL vbr_code_end]
+vbr_code_end:
 times 510-($-$$) db 0
 dw 0xAA55

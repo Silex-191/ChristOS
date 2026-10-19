@@ -1,25 +1,29 @@
 void endless_loop();
 
-//void kernel_entry() {
-//  *((short int*) 0xB8000) = 0;
-//  endless_loop();
-//}
+extern int __bss_start;
+extern int __bss_end;
 
 void kernel_entry() {
-    volatile unsigned short int* vga = (volatile unsigned short int*) 0xB8000;
+  int *bss = &__bss_start;
+  while (bss < &__bss_end) {
+    *bss = 0;
+    bss++;
+  }
 
-    while (vga != (volatile unsigned short int*) 0xB8F9E) {
-      *vga = 0;
-      vga++;
-    }
+  volatile unsigned short int* vga = (volatile unsigned short int*) 0xB8000;
 
-    vga = (volatile unsigned short int*) 0xB8720;
+  while (vga != (volatile unsigned short int*) 0xB8FA0) {
+    *vga = 0;
+    vga++;
+  }
 
-    const char *text = "HELLO WORLD";
+  vga = (volatile unsigned short int*) 0xB8720;
 
-    for (int i = 0; text[i] != '\0'; i++) {
-        vga[i] = (0x0B << 8) | text[i];
-    }
+  const char *text = "Hello mr.Stark!";
 
-    endless_loop();
+  for (int i = 0; text[i] != '\0'; i++) {
+    vga[i] = (0x0B << 8) | text[i];
+  }
+
+  endless_loop();
 }
