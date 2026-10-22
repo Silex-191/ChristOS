@@ -5,7 +5,7 @@ NASM = nasm
 NASM_FLAGS = -felf
 
 GCC = gcc
-GCC_FLAGS = -std=c99 -m32 -O2 -ffreestanding \
+GCC_FLAGS = -g -std=c99 -m32 -O2 -ffreestanding \
 						-no-pie -fno-pie -mno-sse -fno-stack-protector -Wall -Wextra
 
 QEMU = qemu-system-i386

@@ -1,8 +1,6 @@
 target remote localhost:1234
 set disassembly-flavor intel
 
-b *0x7c00
+symbol-file .tmp/os.elf
+b kernel_entry
 c
-
-set arch i8086
-

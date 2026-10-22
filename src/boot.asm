@@ -100,6 +100,11 @@ endless_loop:
   hlt
   jmp endless_loop
 
+[GLOBAL clear_interrupts_flag]
+clear_interrupts_flag:
+  cli
+  ret
+
 reading_failure_msg: db "Reading failure", 0x0D, 0x0A, 0x00
 
 align 4
